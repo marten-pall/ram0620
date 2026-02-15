@@ -32,8 +32,10 @@ def write_roman(number):
 
 
 def main():
-    starting_number = 888
+    starting_number = input("Millist numbrit soovid muuta rooma numbriks? 1-1000: ")
+    starting_number = int(starting_number)
     """Valideerime numbri"""
+
     if validate_number(starting_number):
 
         """Kui valideeritud, siis muudame rooma numbriks"""
