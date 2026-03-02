@@ -1,118 +1,167 @@
 from abc import ABC, abstractmethod
 from random import randint
 
+"""
+
+Kirjutasin teadlikult igale alamklassile eraldi funktsiooni on_elus abstractklassina
+
+Nii saan ühe funktsiooniga iga klassi puhul kontrollida nii elude kui ka noolte/mana arvu
+MÄNGU SAAB MÄNGIDA KUNI LÕPMATU ARV MÄNGIJATEGA - lihtsalt tüütu
+
+"""
+
+
 class character(ABC):
-    def __init__(self,name):
-        self._lives = 20
+    def __init__(self, name):
+        self._lives = 30
         self._name = name
 
-    def __str__(self):
-        return f'{self._lives, self._name}'
+    def __repr__(self):
+        return f'{self._name}-l on alles {self._lives} elu'
 
     @abstractmethod
     def on_elus(self):
+        """ABSTRACTMETHOD — kontrollib elusid JA ressursse (mana/nooled)"""
         pass
 
     def võta_kahju(self, damage):
+        """KAPSELDAMINE"""
         if isinstance(damage, int):
             self._lives -= damage
         return False
 
     def runda(self, vastane, damage):
         vastane.võta_kahju(damage)
-        print(f'{self._name} ründas {vastane._name} (elus järgi: {vastane._lives})')
+        print(f'{vastane._name}-t ründas {self._name} ja võttis {damage} elu! ({vastane.__repr__()})\n')
+
 
 class Sõdalane(character):
+
     def __init__(self, name):
+        """Pärilus"""
         super().__init__(name)
 
     def on_elus(self):
-        if self._lives > 0:
-            return True
-        return False
+        return self._lives > 0
 
     def create_damage(self):
-        """Abifunktsioon random damage jaoks vahemiks 10-20"""
-        return randint(10,20)
+        """Polümorfism"""
+        return randint(4, 15)
 
 
 class Maag(character):
+
     def __init__(self, name):
+        """Pärilus"""
         super().__init__(name)
-        self._mana = 20
+        self._mana = 30
 
     def on_elus(self):
-        if self._lives > 0:
-            if self._mana > 0:
-                return True
-        return False
+        return self._lives > 0 and self._mana > 0
 
     def create_damage(self):
-        """Abifunktsioon random damage jaoks vahemiks 5-10"""
-        return randint(5,10)
+        """Polümorfism"""
+        protsent = randint(1, 5)
+        self.eemalda_mana(protsent)
+        return 10 if protsent == 5 else 1
 
+    def eemalda_mana(self, number):
+        self._mana -= number
+
+    def __repr__(self):
+        return super().__repr__() + f' ja {self._mana} mana!'
 
 
 class Vibukütt(character):
+
     def __init__(self, name):
+        """Pärilus"""
         super().__init__(name)
-        self._nooled = 10
+        self._nooled = 20
 
     def on_elus(self):
-        if self._lives > 0:
-            if self._nooled > 0:
-                return True
-        return False
+        return self._lives > 0 and self._nooled > 0
 
     def create_damage(self):
-        """Abifunktsioon random damage jaoks vahemiks 10-20"""
-        return randint(7,14)
+        """Polümorfism"""
+        protsent = randint(1, 2)
+        self.eemalda_nooled()
+        return 6 if protsent == 2 else 1
 
+    def eemalda_nooled(self):
+        self._nooled -= 3
+
+    def __repr__(self):
+        return super().__repr__() + f' ja {self._nooled} noolt!'
 
 
 def loo_tegelased(indeks):
-    name = input(f"Palun sisesta {indeks}. karakteri nimi:")
-    tegelane = input(f"Palun sisesta {indeks}. karakteri tüüp (Maag, Sõdalane või Vibukütt):")
-    if tegelane.lower() == "maag":
-        t1 = Maag(name)
-    elif tegelane.lower() == "sõdalane":
-        t1 = Sõdalane(name)
-    elif tegelane.lower() == "vibukütt":
-        t1 = Vibukütt(name)
-    else:
-        print("Tegemist ei ole valitava karakterina")
-        return False
-    return t1
-
-def lahing(t1, t2):
+    indeks += 1
     while True:
-        print(f"Mängus on {t1._name} (Elusid alles: {t2._lives}) ja {t1._name} (Elusid alles: {t2._lives})")
+        name = input(f"Palun sisesta {indeks}. karakteri nimi: ")
+        tegelane = input(f"Palun sisesta {indeks}. karakteri tüüp (Maag, Sõdalane või Vibukütt): ")
+        if tegelane.lower() == "maag":
+            return Maag(name)
+        elif tegelane.lower() == "sõdalane":
+            return Sõdalane(name)
+        elif tegelane.lower() == "vibukütt":
+            return Vibukütt(name)
+        else:
+            print("Tegemist ei ole valitava karakteriga!")
 
-        keda_rünnata = input(f"{t1._name}, keda soovid rünnata: ")
-        damage = t1.create_damage()
-        """Vaja lisada listist objekt nime järgi"""
-        t1.runda(t2, damage)
-        if not t2.on_elus():
-            print(f"{t1._name} võitis!")
+
+def lahing(mängijad: list):
+    print("\nAlgab lahing: ...\n")
+    print("Algseis:", ' | '.join(str(t) for t in mängijad))
+
+    kord = 1
+    while True:
+        print(f"\nKÄIK {kord}")
+
+        for ründaja in mängijad:
+            if not ründaja.on_elus():
+                continue
+
+            # Vaenlased = elus (ainult elud, mitte ressursid)
+            elus_vaenlased = [t for t in mängijad if t != ründaja and t.on_elus()]
+            if not elus_vaenlased:
+                print(f"{ründaja._name} võitis!")
+                return
+
+            print(f"Elus vaenlased: {[t._name for t in elus_vaenlased]}")
+            keda_rünnata = input(f"{ründaja._name} | {ründaja._lives}, keda soovid rünnata: ")
+
+            sihtmärk = next((t for t in elus_vaenlased if t._name == keda_rünnata), None)
+            if sihtmärk is None:
+                print("Sellist vaenlast pole! Käik vahele jäetud.")
+                continue
+
+            damage = ründaja.create_damage()
+            ründaja.runda(sihtmärk, damage)
+
+            if not sihtmärk.on_elus():
+                print(f"{sihtmärk._name} on langenud!")
+
+            if not ründaja.on_elus():
+                print(f"{ründaja._name} on langenud! (ressursid said otsa)")
+
+        # Mängus on ainult eluga tegelased
+        elus = [t for t in mängijad if t.on_elus()]
+        if len(elus) == 1:
+            print(f"\n{elus[0]._name} võitis lahingu!")
             return False
 
-        keda_rünnata = input(f"{t2._name}, keda soovid rünnata: ")
-        damage = t2.create_damage()
-        """Vaja lisada listist objekt nime järgi"""
-        t2.runda(t1, damage)
-        if not t1.on_elus():
-            print(f"{t2._name} võitis!")
-            return False
-
-def main():
-    tegelased = []
-    for i in range(1,3):
-        j = loo_tegelased(i)
-        tegelased.append(j)
-
-    lahing(tegelased[0], tegelased[1])
-
+        kord += 1
 
 
 if __name__ == '__main__':
-    main()
+    mängijad = []
+    mängijate_arv = input("Mitu mängijat mängib? ")
+    for i in range(int(mängijate_arv)):
+        mängijad.append(loo_tegelased(i))
+
+    if len(mängijad) > 1:
+        lahing(mängijad)
+    else:
+        print("Üksi on ju igav mängida :(")
+        exit()
