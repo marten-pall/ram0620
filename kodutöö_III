@@ -1,0 +1,249 @@
+import tkinter as Tk
+from tkinter import *
+import math
+
+"""Globaalsed muutujad"""
+current_angle = 0          # Praegune pöördenurk (negatiivne = vastupäeva)
+mouse_is_down = False      # Kas hiir on alla vajutatud
+selected_number = None     # Valitud number (0-9)
+selected_number_index = None  # Valitud numbri indeks listis (0-9)
+chosen_number = ""         # Kogu sisestatud numbrijada
+start_mouse_angle = 0      # Hiire nurk lohistamise alguses
+max_rotation = 0           # Maksimaalne lubatud pöördenurk (alati negatiivne)
+
+app = Tk()
+app.geometry('1200x800+100+100')
+app.title("Telefon")
+canvas = Canvas(app, bg='white')
+canvas.pack(expand=YES, fill=BOTH)
+
+# Ketta keskpunkt ja raadius
+center_x = 255
+center_y = 250
+radius = 120
+
+# Peaketas (kuldne ring)
+x1 = 100
+y1 = 90
+x2 = 410
+y2 = 410
+fill_color = '#d4af37'
+outline_color = '#b8941f'
+width = 3
+disk_id = canvas.create_oval(x1, y1, x2, y2,
+                              fill=fill_color,
+                              outline=outline_color,
+                              width=width)
+
+# Keskmine auk
+hole_radius = 30
+center_hole_id = canvas.create_oval(
+    255 - hole_radius, 250 - hole_radius,
+    255 + hole_radius, 250 + hole_radius,
+    fill='#1a1a1a', outline='#0d0d0d', width=2
+)
+
+number_holes = []   # Numbriaukude canvas-objektid
+number_texts = []   # Numbrite tekstid canvas-il
+
+
+def circle_x_y(i, angle_offset):
+    """Arvutab numbri x,y positsiooni kettal, arvestades pöördenurka"""
+    angle = math.radians(i * 36 - 90 + angle_offset)
+    x = center_x + radius * math.cos(angle)
+    y = center_y + radius * math.sin(angle)
+    return x, y
+
+
+# Loome 10 numbriaugud ja nende sildid
+for i in range(10):
+    x, y = circle_x_y(i, 0)
+
+    # Numbriauk (tume ring)
+    hole = canvas.create_oval(x - 15, y - 15, x + 15, y + 15,
+                              fill='#2c2c2c', outline='#1a1a1a', width=2)
+    number_holes.append(hole)
+
+    # Numbri tekst augu kohal
+    num = (i + 1) % 10  # i=0 → "1", i=9 → "0"
+    text = canvas.create_text(x, y - 35, text=str(num),
+                              font=('Arial', 16, 'bold'), fill='white')
+    number_texts.append(text)
+
+# Stopper (pidur kella 10-11 juures, 252° ehk -108°)
+# Numbrid peavad jõudma siia, et valida vastav number
+stopper_angle_rad = math.radians(-108)
+stopper_x = center_x + 95 * math.cos(stopper_angle_rad)
+stopper_y = center_y + 95 * math.sin(stopper_angle_rad)
+stopper_id = canvas.create_rectangle(
+    stopper_x - 5, stopper_y - 3, stopper_x + 5, stopper_y + 10,
+    fill='#cc0000', outline='#990000', width=2
+)
+
+# --- Kasutajaliides: ekraan ja nupp ---
+
+# Ekraan valitud numbrite kuvamiseks (asub "Helista" nupu kohal)
+display = StringVar()
+display_label = Label(
+    app, textvariable=display,
+    font=('Arial', 28, 'bold'), bg='#111', fg='#00ff88',
+    relief='sunken', width=12, anchor='e', padx=8
+)
+display_label.place(x=400, y=340)
+
+#
+# Helistamise nupp
+button_text = "Helista"
+button_x_pos = 400
+button_y_pos = 410
+B = Button(app, text=button_text, command=lambda: call_number())
+B.place(x=button_x_pos, y=button_y_pos)
+
+
+# --- Abifunktsioonid ---
+
+def get_mouse_angle(event):
+    """Tagastab hiire nurga (kraadides) ketta keskpunkti suhtes"""
+    x = event.x - center_x
+    y = event.y - center_y
+    angle_radians = math.atan2(y, x)
+    angle_degrees = angle_radians * 180 / math.pi
+    return angle_degrees
+
+
+def update_numbers():
+    """Uuendab kõigi numbrite positsioone vastavalt current_angle-le"""
+    for i in range(10):
+        x, y = circle_x_y(i, current_angle)
+        canvas.coords(number_holes[i], x - 15, y - 15, x + 15, y + 15)
+        canvas.coords(number_texts[i], x, y - 35)
+
+
+def calculate_max_rotation(i):
+    """
+    Arvutab maksimaalse VASTUPÄEVA pöördenurga konkreetse numbri jaoks.
+    Tagastab negatiivse väärtuse (vastupäeva = negatiivne nurk).
+
+    Loogika:
+      - Number i algab nurgas (i*36 - 90) kraadi
+      - Stopper asub 252° juures (= -108° + 360°)
+      - Vastupäeva pööramine vähendab nurka → delta on negatiivne
+    """
+    start_angle = (i * 36 - 90) % 360  # Numbri algne nurk vahemikus 0-360
+    stopper_deg = 252                   # Stopperi nurk (0-360 süsteemis)
+
+    delta = stopper_deg - start_angle   # Nurk stopperini
+    if delta > 0:
+        delta -= 360  # Teeme negatiivseks (vastupäeva suund)
+
+    return delta  # Näiteks: num1 → -18°, num0 → -342°
+
+
+# --- Hiire sündmused ---
+
+def on_mouse_down(event):
+    """Hiire nupu alla vajutamine: kontrollime kas klõpsati numbriaugule"""
+    global mouse_is_down, start_mouse_angle, selected_number, selected_number_index, max_rotation
+
+    for i, hole in enumerate(number_holes):
+        # Leiame augu keskpunkti praegustest koordinaatidest
+        coords = canvas.coords(hole)
+        hole_x = (coords[0] + coords[2]) / 2
+        hole_y = (coords[1] + coords[3]) / 2
+
+        # Kontrollime kas klõps oli augu sees
+        distance = math.sqrt((event.x - hole_x) ** 2 + (event.y - hole_y) ** 2)
+        if distance < 20:
+            mouse_is_down = True
+            start_mouse_angle = get_mouse_angle(event)
+            selected_number_index = i
+            selected_number = (i + 1) % 10
+
+            # Arvutame vastupäeva pöördemaksimumi (negatiivne väärtus)
+            max_rotation = calculate_max_rotation(i)
+
+            print(f"Valisin numbri: {selected_number}  (max pööramine: {max_rotation:.1f}°)")
+            break
+
+
+def on_mouse_drag(event):
+    """Hiire lohistamine (nupp all): pöörame ketast vastupäeva"""
+    global current_angle, start_mouse_angle
+
+    if not mouse_is_down:
+        return
+
+    new_mouse_angle = get_mouse_angle(event)
+    angle_change = new_mouse_angle - start_mouse_angle
+
+    # Normaliseerimine: vältimaks hüppeid kui hiire nurk ületab ±180° piiri
+    upper_limit = 180
+    lower_limit = -180
+    if angle_change > upper_limit:
+        full_rotation = 360
+        angle_change = angle_change - full_rotation
+    elif angle_change < lower_limit:
+        full_rotation = 360
+        angle_change = angle_change + full_rotation
+
+    new_angle = current_angle + angle_change
+
+    # Lubame ainult vastupäeva pöörlemist (negatiivne) kuni max_rotation-ni
+    # max_rotation on negatiivne, seega: max_rotation <= new_angle <= 0
+    if max_rotation <= new_angle <= 0:
+        current_angle = new_angle
+        update_numbers()
+        start_mouse_angle = new_mouse_angle
+
+
+def on_mouse_up(event):
+    """Hiire nupu vabastamine: kontrollime kas number valiti"""
+    global mouse_is_down, current_angle, selected_number, chosen_number
+
+    if not mouse_is_down:
+        return
+
+    mouse_is_down = False
+
+    # Number loetakse valituks kui pöörded on üle 80% maksimumist
+    # Mõlemad on negatiivsed → väiksem arv = rohkem pööratud
+    if current_angle < max_rotation * 0.8:
+        chosen_number += str(selected_number)
+        display.set(chosen_number)          # Uuendame ekraani kohe
+        print(f"Number {selected_number} valitud! Praegu sisestatud: {chosen_number}")
+    else:
+        print(f"Ei jõutud stopperini, number {selected_number} ei läinud läbi")
+
+    selected_number = None
+    spin_back()  # Ketas kerib tagasi
+
+
+def spin_back():
+    """Pöörab ketta aeglaselt tagasi algasendisse (nagu päris telefonil)"""
+    global current_angle
+
+    if abs(current_angle) > 0.5:
+        current_angle *= 0.85       # Aeglustub järk-järgult
+        update_numbers()
+        app.after(30, spin_back)    # Järgmine samm 30ms pärast
+    else:
+        current_angle = 0           # Täpselt algasendisse
+        update_numbers()
+
+
+def call_number():
+    """Helistab sisestatud numbrile ja tühjendab ekraani"""
+    global chosen_number
+    number_length = len(chosen_number)
+    if number_length > 0:
+        print(f"Helistan numbrile: {chosen_number}")
+    chosen_number = ''
+    display.set("")
+
+
+# Seome hiire sündmused canvas-iga
+canvas.bind("<Button-1>", on_mouse_down)
+canvas.bind("<B1-Motion>", on_mouse_drag)
+canvas.bind("<ButtonRelease-1>", on_mouse_up)
+
+app.mainloop()
